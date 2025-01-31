@@ -1,0 +1,8 @@
+Flask
+flask_cors
+youtube-transcript-api
+keybert
+fpdf2
+googletrans==4.0.0-rc1
+google-generativeai
+python-dotenv

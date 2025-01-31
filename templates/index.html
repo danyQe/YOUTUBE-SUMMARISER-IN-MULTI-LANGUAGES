@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Video Summarizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/js/all.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Add marked.js for markdown parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+    <!-- Add highlight.js for code syntax highlighting -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body class="bg-gradient-to-br from-gray-900 to-gray-800 min-h-screen text-white">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- Header Section -->
+        <div class="text-center mb-12">
+            <h1 class="text-4xl md:text-5xl font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-purple-600">
+                YouTube Video Summarizer
+            </h1>
+            <p class="text-gray-400 text-lg">Get concise summaries of any YouTube video in your preferred language</p>
+        </div>
+
+        <!-- Input Section -->
+        <div class="bg-gray-800 rounded-lg p-6 shadow-xl mb-8">
+            <div class="space-y-4">
+                <div class="relative">
+                    <i class="fas fa-link absolute left-3 top-3 text-gray-400"></i>
+                    <input 
+                        type="text" 
+                        id="videoURL" 
+                        placeholder="Paste YouTube Video URL here" 
+                        class="w-full pl-10 pr-4 py-2 bg-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none text-white placeholder-gray-400"
+                    />
+                </div>
+                
+                <div class="flex flex-col sm:flex-row gap-4">
+                    <div class="relative flex-1">
+                        <i class="fas fa-globe absolute left-3 top-3 text-gray-400"></i>
+                        <select 
+                            id="language" 
+                            class="w-full pl-10 pr-4 py-2 bg-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 focus:outline-none text-white appearance-none cursor-pointer"
+                        >
+                            <!-- Languages will be populated dynamically -->
+                        </select>
+                    </div>
+                    
+                    <button 
+                        onclick="summarize()" 
+                        id="summarizeBtn"
+                        class="px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all duration-300 flex items-center justify-center gap-2 min-w-[140px]"
+                    >
+                        <i class="fas fa-magic"></i>
+                        <span>Summarize</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loading" class="hidden">
+            <div class="flex justify-center items-center space-x-2 mb-8">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
+                <span class="text-gray-400">Generating summary...</span>
+            </div>
+        </div>
+
+        <!-- Summary Section -->
+        <div id="summaryContainer" class="hidden">
+            <div class="bg-gray-800 rounded-lg p-6 shadow-xl space-y-6">
+                <!-- Video Info -->
+                <div class="flex items-center justify-between">
+                    <h2 class="text-xl font-semibold flex items-center gap-2">
+                        <i class="fas fa-file-alt text-purple-500"></i>
+                        Video Summary
+                    </h2>
+                    <button 
+                        onclick="downloadPDF()" 
+                        id="downloadBtn"
+                        class="text-sm px-4 py-2 bg-purple-600 rounded-lg hover:bg-purple-700 transition-all duration-300 flex items-center gap-2"
+                        style="display: none;"
+                    >
+                        <i class="fas fa-download"></i>
+                        Download PDF
+                    </button>
+                </div>
+
+                <!-- Language Info -->
+                <div id="languageInfo" class="text-sm text-gray-400"></div>
+
+                <!-- Keywords -->
+                <div id="keywordsContainer" class="hidden">
+                    <h3 class="text-lg font-semibold mb-2">Keywords</h3>
+                    <div id="keywords" class="flex flex-wrap gap-2"></div>
+                </div>
+
+                <!-- Summary Content -->
+                <div>
+                    <h3 class="text-lg font-semibold mb-2">Summary</h3>
+                    <div id="summary" class="prose prose-invert max-w-none text-gray-300"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error Message -->
+        <div id="error" class="hidden">
+            <div class="bg-red-900/50 border border-red-500 rounded-lg p-4 mt-4">
+                <div class="flex items-center gap-2 text-red-500">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span id="errorText"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State management
+        let currentVideoId = null;
+        let currentSummary = null;
+        marked.setOptions({
+            breaks: true, // Enable line breaks
+            gfm: true,    // Enable GitHub Flavored Markdown
+            highlight: function(code, lang) {
+                // Use highlight.js for code blocks
+                if (lang && hljs.getLanguage(lang)) {
+                    try {
+                        return hljs.highlight(code, { language: lang }).value;
+                    } catch (err) {}
+                }
+                return code;
+            }
+        });
+        // Initialize language selector
+        function sanitizeHTML(html) {
+            const div = document.createElement('div');
+            div.textContent = html;
+            return div.innerHTML;
+        }
+
+        async function initializeLanguages() {
+            try {
+                const response = await fetch('/api/languages');
+                const languages = await response.json();
+                console.log();
+                const languageSelect = document.getElementById('language');
+                if(!languageSelect)
+            {
+                console.error("Language select element not found");
+                return;
+            }
+                languageSelect.innerHTML = Object.entries(languages)
+                    .map(([code, name]) => `
+                        <option value="${code}" ${code === 'en' ? 'selected' : ''}>
+                            ${name}
+                        </option>
+                    `)
+                    .join('');
+            } catch (error) {
+                console.error('Error loading languages:', error);
+                showError('Failed to load supported languages');
+            }
+        }
+
+        // Load languages on page load
+        document.addEventListener('DOMContentLoaded', initializeLanguages);
+
+        function setLoading(isLoading) {
+            const loadingEl = document.getElementById('loading');
+            const summarizeBtn = document.getElementById('summarizeBtn');
+            const summaryContainer = document.getElementById('summaryContainer');
+            const downloadBtn = document.getElementById('downloadBtn');
+            
+            loadingEl.classList.toggle('hidden', !isLoading);
+            summarizeBtn.disabled = isLoading;
+            summarizeBtn.classList.toggle('opacity-50', isLoading);
+            if (isLoading) {
+                summaryContainer.classList.add('hidden');
+            }
+            downloadBtn.style.display = document.getElementById('language').value === 'en' ? 'block' : 'none';
+        }
+
+        function showError(message) {
+            const errorEl = document.getElementById('error');
+            const errorText = document.getElementById('errorText');
+            errorText.textContent = message;
+            errorEl.classList.remove('hidden');
+        }
+
+        function hideError() {
+            const errorEl = document.getElementById('error');
+            errorEl.classList.add('hidden');
+        }
+
+        function displayKeywords(keywords) {
+            const keywordsContainer = document.getElementById('keywordsContainer');
+            const keywordsEl = document.getElementById('keywords');
+            
+            if (keywords && keywords.length > 0) {
+                keywordsEl.innerHTML = keywords
+                    .map(keyword => `
+                        <span class="px-3 py-1 bg-purple-900/50 rounded-full text-sm text-purple-200">
+                            ${keyword}
+                        </span>
+                    `)
+                    .join('');
+                keywordsContainer.classList.remove('hidden');
+            } else {
+                keywordsContainer.classList.add('hidden');
+            }
+        }
+
+        function formatSummary(summary) {
+            // First sanitize the input
+            const sanitizedSummary = sanitizeHTML(summary);
+            
+            // Convert markdown to HTML
+            const htmlContent = marked.parse(sanitizedSummary);
+            
+            // Add Tailwind classes to elements
+            return htmlContent
+                .replace(/<h1>/g, '<h1 class="text-2xl font-bold mb-4">')
+                .replace(/<h2>/g, '<h2 class="text-xl font-bold mb-3">')
+                .replace(/<h3>/g, '<h3 class="text-lg font-bold mb-2">')
+                .replace(/<ul>/g, '<ul class="list-disc pl-6 mb-4 space-y-2">')
+                .replace(/<ol>/g, '<ol class="list-decimal pl-6 mb-4 space-y-2">')
+                .replace(/<li>/g, '<li class="mb-1">')
+                .replace(/<p>/g, '<p class="mb-4 leading-relaxed">')
+                .replace(/<blockquote>/g, '<blockquote class="border-l-4 border-purple-500 pl-4 italic my-4">')
+                .replace(/<pre>/g, '<pre class="bg-gray-900 rounded-lg p-4 mb-4 overflow-x-auto">')
+                .replace(/<code>/g, '<code class="font-mono bg-gray-900 rounded px-1">');
+        }
+
+        async function summarize() {
+            const videoURL = document.getElementById('videoURL').value.trim();
+            const language = document.getElementById('language').value;
+            
+            if (!videoURL) {
+                showError('Please enter a YouTube video URL');
+                return;
+            }
+
+            try {
+                hideError();
+                setLoading(true);
+
+                const response = await fetch('/summarize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: videoURL, language })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to generate summary');
+                }
+
+                const data = await response.json();
+                
+                // Store current video and summary data
+                currentVideoId = data.video_id;
+                currentSummary = data.summary;
+                
+                // Update language info
+                document.getElementById('languageInfo').textContent = 
+                    `Summarized in ${data.language}`;
+                
+                // Display summary
+                const summaryEl = document.getElementById('summary');
+                summaryEl.innerHTML = formatSummary(data.summary);
+                
+                document.querySelectorAll('pre code').forEach((block) => {
+                    hljs.highlightBlock(block);
+                });
+                // Display keywords
+                displayKeywords(data.keywords);
+                
+                // Show summary container
+                document.getElementById('summaryContainer').classList.remove('hidden');
+                
+            } catch (error) {
+                showError(error.message);
+                console.error('Error:', error);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function downloadPDF() {
+            if (!currentVideoId || !currentSummary) {
+                showError('No summary available to download');
+                return;
+            }
+            
+
+            try {
+                const response = await fetch('/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        summary: currentSummary,
+                        video_id: currentVideoId
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to generate PDF');
+                }
+
+                // Create a blob from the PDF stream
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                
+                // Create a temporary link and click it
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `summary_${currentVideoId}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+
+            } catch (error) {
+                showError('Failed to download PDF');
+                console.error('Error:', error);
+            }
+        }
+
+        // Enter key handler
+        document.getElementById('videoURL').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                summarize();
+            }
+        });
+    </script>
+</body>
+</html>
