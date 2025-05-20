@@ -271,7 +271,7 @@ def get_transcript(video_id: str, language: str) -> str:
         if not transcript_list:
             raise ValueError("No transcript available")
         formatter = TextFormatter()
-        transcript_text = str(formatter.format_transcript(transcript_list))
+        transcript_text = str("\n".join(line.get("text") for line in transcript_list))
         print("transcripted text:",transcript_text)
         if not transcript_text:
             raise ValueError("Empty transcript")
