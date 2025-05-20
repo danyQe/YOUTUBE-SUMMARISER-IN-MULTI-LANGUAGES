@@ -1,7 +1,6 @@
 from flask import Flask, request, jsonify, render_template, send_file
 from flask_cors import CORS
 from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api.formatters import TextFormatter
 # from transformers import pipeline
 from keybert import KeyBERT
 from fpdf import FPDF
@@ -270,7 +269,6 @@ def get_transcript(video_id: str, language: str) -> str:
         # print("trnscripted_list:",transcript_list)
         if not transcript_list:
             raise ValueError("No transcript available")
-        formatter = TextFormatter()
         transcript_text = str("\n".join(line.get("text") for line in transcript_list))
         print("transcripted text:",transcript_text)
         if not transcript_text:
